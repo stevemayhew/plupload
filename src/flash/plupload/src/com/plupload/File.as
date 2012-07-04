@@ -46,7 +46,7 @@ package com.plupload {
 		private var _fileRef:FileReference, _urlStream:URLStream, _cancelled:Boolean;
 		private var _uploadUrl:String, _uploadPath:String, _mimeType:String;
 		private var _id:String, _fileName:String, _size:Number, _imageData:ByteArray;
-		private var _multipart:Boolean, _fileDataName:String, _chunking:Boolean, _chunk:int, _chunks:int, _chunkSize:int, _postvars:Object;
+		private var _multipart:Boolean, _fileDataName:String, _chunking:Boolean, _chunk:int, _chunks:int, _chunkSize:int, _currentChunkSize:int, _postvars:Object;
 		private var _headers:Object, _settings:Object;
 
 		/**
@@ -262,6 +262,7 @@ package com.plupload {
 					file._chunk = chunk;
 					file._chunks = chunks;
 					file._chunkSize = chunkSize;
+					file._currentChunkSize = Math.min(chunkSize, file._size);
 					file._postvars = postvars;
 
 					file.uploadNextChunk();
@@ -310,6 +311,27 @@ package com.plupload {
 			this._fileRef.load();
 		}
 
+		public function retryUploadChunk():Boolean {
+			var fileData:ByteArray;
+
+			// Reset the current chunk back and move the ByteArray position back in the file, then just call uploadNextChunk
+
+			this._chunk--;
+
+			// Use image data if it exists, will exist if the image was resized
+			if (this._imageData != null)
+				fileData = this._imageData;
+			else
+				fileData = this._fileRef.data;
+
+			if (this._chunk === 0) {
+				fileData.position = 0;
+			} else {
+				fileData.position = fileData.position - this._currentChunkSize;
+			}
+			return uploadNextChunk();
+		}
+
 		/**
 		 * Uploads the next chunk or terminates the upload loop if all chunks are done.
 		 */
@@ -338,6 +360,8 @@ package com.plupload {
 				fileData = this._fileRef.data;
 
 			fileData.readBytes(chunkData, 0, fileData.position + this._chunkSize > fileData.length ? fileData.length - fileData.position : this._chunkSize);
+
+			file._currentChunkSize = chunkData.length;
 
 			// Setup URL stream
 			file._urlStream = new URLStream();
@@ -423,6 +447,9 @@ package com.plupload {
 				if (this._chunking) {
 					this._postvars["chunk"] = this._chunk;
 					this._postvars["chunks"] = this._chunks;
+					this._postvars["curChunkSize"] = file._currentChunkSize;
+					this._postvars["actualFileSize"] = file._size;
+					this._postvars["id"] = file._id;
 				}
 
 				// Append mutlipart parameters

@@ -177,7 +177,7 @@
 
 			// Wait for Flash to send init event
 			uploader.bind("Flash:Init", function() {	
-				var lookup = {}, i;
+				var i;
 
 				getFlashObj().setFileFilters(uploader.settings.filters, uploader.settings.multi_selection);
 
@@ -190,7 +190,7 @@
 				uploader.bind("UploadFile", function(up, file) {
 					var settings = up.settings, resize = uploader.settings.resize || {};
 
-					getFlashObj().uploadFile(lookup[file.id], settings.url, {
+					getFlashObj().uploadFile(file.id, settings.url, {
 						name : file.target_name || file.name,
 						mime : plupload.mimeTypes[file.name.replace(/^.+\.([^.]+)/, '$1').toLowerCase()] || 'application/octet-stream',
 						chunk_size : settings.chunk_size,
@@ -212,7 +212,7 @@
 
 
 				uploader.bind("Flash:UploadProcess", function(up, flash_file) {
-					var file = up.getFile(lookup[flash_file.id]);
+					var file = up.getFile(flash_file.id);
 
 					if (file.status != plupload.FAILED) {
 						file.loaded = flash_file.loaded;
@@ -223,7 +223,7 @@
 				});
 
 				uploader.bind("Flash:UploadChunkComplete", function(up, info) {
-					var chunkArgs, file = up.getFile(lookup[info.id]);
+					var chunkArgs, file = up.getFile(info.id), chunkUploadSucceeded, settings = up.settings;
 
 					chunkArgs = {
 						chunk : info.chunk,
@@ -231,21 +231,70 @@
 						response : info.text
 					};
 
-					up.trigger('ChunkUploaded', file, chunkArgs);
+					chunkUploadSucceeded = up.trigger('ChunkUploaded', file, chunkArgs);
+					if ( chunkUploadSucceeded !== undefined && ! chunkUploadSucceeded ) {
+						switch(file.status) {
+							// failed with request to retry the chunk
+							case plupload.RETRYING:
+								file.retryCount = file.retryCount ? ( file.retryCount + 1 ) : 1;
+								retryParameters = settings.getRetryParameters(file);
+								if (retryParameters) {
+									debug.log("Retrying... retryCount: " + file.retryCount + " delay: " + retryParameters.delay);
+									setTimeout(function() {
+										getFlashObj().retryUploadChunk();
+									}, retryParameters.delay);
+								} else {
+									file.status = plupload.FAILED;
+									file.retryCount = 0;
+									debug.log("Retrying... retryCount exceeded max: " + settings.retry_max_count);
+									up.trigger('Error', {
+										code : plupload.HTTP_REQUEST_RETRY_LIMIT,
+										message : plupload.translate('Retransmit retry limit exceeded.'),
+										file : file
+									});
+								}
+								return;
 
-					// Stop upload if file is maked as failed
-					if (file.status !== plupload.FAILED && up.state !== plupload.STOPPED) {
-						getFlashObj().uploadNextChunk();
+							case plupload.FAILED:
+								return;
+
+							default:
+								if (up.state !== plupload.STOPPED) {
+									getFlashObj().uploadNextChunk();
+								}
+
+								// Last chunk then dispatch FileUploaded event
+								if (info.chunk == info.chunks - 1) {
+									file.status = plupload.DONE;
+
+									up.trigger('FileUploaded', file, {
+										response : info.text
+									});
+								} else {
+									file.status = plupload.UPLOADING;
+									file.retryCount = 0;
+								}
+								break;
+						}
+					} else {
+						if (up.state !== plupload.STOPPED) {
+							getFlashObj().uploadNextChunk();
+						}
+
+						// Last chunk then dispatch FileUploaded event
+						if (info.chunk == info.chunks - 1) {
+							file.status = plupload.DONE;
+
+							up.trigger('FileUploaded', file, {
+								response : info.text
+							});
+						} else {
+							file.status = plupload.UPLOADING;
+							file.retryCount = 0;
+						}
 					}
 
-					// Last chunk then dispatch FileUploaded event
-					if (info.chunk == info.chunks - 1) {
-						file.status = plupload.DONE;
 
-						up.trigger('FileUploaded', file, {
-							response : info.text
-						});
-					}
 				});
 
 				uploader.bind("Flash:SelectFiles", function(up, selected_files) {
@@ -255,12 +304,7 @@
 					for (i = 0; i < selected_files.length; i++) {
 						file = selected_files[i];
 
-						// Store away flash ref internally
-						id = plupload.guid();
-						lookup[id] = file.id;
-						lookup[file.id] = id;
-
-						files.push(new plupload.File(id, file.name, file.size));
+						files.push(new plupload.File(file.id, file.name, file.size));
 					}
 
 					// Trigger FilesAdded event if we added any
@@ -274,7 +318,7 @@
 						code : plupload.SECURITY_ERROR,
 						message : plupload.translate('Security error.'),
 						details : err.message,
-						file : uploader.getFile(lookup[err.id])
+						file : uploader.getFile(err.id)
 					});
 				});
 
@@ -283,7 +327,7 @@
 						code : plupload.GENERIC_ERROR,
 						message : plupload.translate('Generic error.'),
 						details : err.message,
-						file : uploader.getFile(lookup[err.id])
+						file : uploader.getFile(err.id)
 					});
 				});
 
@@ -292,7 +336,7 @@
 						code : plupload.IO_ERROR,
 						message : plupload.translate('IO error.'),
 						details : err.message,
-						file : uploader.getFile(lookup[err.id])
+						file : uploader.getFile(err.id)
 					});
 				});
 				
@@ -300,7 +344,7 @@
 					uploader.trigger('Error', {
 						code : parseInt(err.code, 10),
 						message : plupload.translate('Image error.'),
-						file : uploader.getFile(lookup[err.id])
+						file : uploader.getFile(err.id)
 					});
 				});
 				
@@ -355,12 +399,12 @@
 				
 				
 				uploader.bind('Flash:ExifData', function(up, obj) {
-					uploader.trigger('ExifData', uploader.getFile(lookup[obj.id]), obj.data);
+					uploader.trigger('ExifData', uploader.getFile(obj.id), obj.data);
 				});
 				
 				
 				uploader.bind('Flash:GpsData', function(up, obj) {
-					uploader.trigger('GpsData', uploader.getFile(lookup[obj.id]), obj.data);
+					uploader.trigger('GpsData', uploader.getFile(obj.id), obj.data);
 				});
 				
 
@@ -372,7 +416,7 @@
 					var i;
 
 					for (i = 0; i < files.length; i++) {
-						getFlashObj().removeFile(lookup[files[i].id]);
+						getFlashObj().removeFile(files[i].id);
 					}
 				});
 

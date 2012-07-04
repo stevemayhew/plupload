@@ -231,7 +231,7 @@
 					html5files[id] = file;
 
 					// Expose id, name and size
-					files.push(new plupload.File(id, file.fileName || file.name, file.fileSize || file.size)); // fileName / fileSize depricated
+					files.push(new plupload.File(id, file.fileName || file.name, file.fileSize || file.size, 'type' in file ? file.type : null)); // fileName / fileSize depricated
 				}
 
 				// Trigger FilesAdded event if we added any
@@ -495,7 +495,7 @@
 			});
 
 			uploader.bind("UploadFile", function(up, file) {
-				var settings = up.settings, nativeFile, resize;
+				var settings = up.settings, nativeFile, resize, chunkUploadSucceeded, retryTimeout;
 					
 				function w3cBlobSlice(blob, start, end) {
 					var blobSlice;
@@ -522,13 +522,13 @@
 						
 
 					function uploadNextChunk() {
-						var chunkBlob, br, chunks, args, chunkSize, curChunkSize, mimeType, url = up.settings.url;													
+						var chunkBlob, br, chunks, args, chunkSize, curChunkSize, mimeType, url = up.settings.url;
 
 						
 						function prepareAndSend(bin) {
 							var multipartDeltaSize = 0,
 								boundary = '----pluploadboundary' + plupload.guid(), formData, dashdash = '--', crlf = '\r\n', multipartBlob = '';
-								
+
 							xhr = new XMLHttpRequest;
 															
 							// Do we have upload progress support
@@ -538,9 +538,9 @@
 									up.trigger('UploadProgress', file);
 								};
 							}
-	
+
 							xhr.onreadystatechange = function() {
-								var httpStatus, chunkArgs;
+								var httpStatus, chunkArgs, retryParameters;
 																	
 								if (xhr.readyState == 4 && up.state !== plupload.STOPPED) {
 									// Getting the HTTP status might fail on some Gecko versions
@@ -567,8 +567,42 @@
 												response : xhr.responseText,
 												status : httpStatus
 											};
-	
-											up.trigger('ChunkUploaded', file, chunkArgs);
+
+											chunkUploadSucceeded = up.trigger('ChunkUploaded', file, chunkArgs);
+											if ( chunkUploadSucceeded !== undefined && ! chunkUploadSucceeded ) {
+												switch(file.status) {
+													// failed with request to retry the chunk
+													case plupload.RETRYING:
+														file.retryCount = file.retryCount ? ( file.retryCount + 1 ) : 1;
+														retryParameters = settings.getRetryParameters(file);
+														if (retryParameters) {
+															setTimeout(function() {
+																prepareAndSend(bin);
+															}, retryParameters.delay);
+														} else {
+															file.status = plupload.FAILED;
+															file.retryCount = 0;
+															up.trigger('Error', {
+																code : plupload.HTTP_REQUEST_RETRY_LIMIT,
+																message : plupload.translate('Retransmit retry limit exceeded.'),
+																file : file
+															});
+														}
+														return;
+
+													case plupload.FAILED:
+														return;
+
+													default:
+														file.status = plupload.UPLOADING;
+														file.retryCount = 0;
+														break;
+												}
+											} else {
+												file.status = plupload.UPLOADING;
+												file.retryCount = 0;
+											}
+
 											loaded += curChunkSize;
 	
 											// Stop upload
@@ -607,6 +641,7 @@
 							if (up.settings.multipart && features.multipart) {
 								
 								args.name = file.target_name || file.name;
+								args.actualFileSize = file.size;
 								
 								xhr.open("post", url, true);
 								
@@ -626,9 +661,9 @@
 									});
 	
 									// Add file and send it
-									formData.append(up.settings.file_data_name, bin);								
+									formData.append(up.settings.file_data_name, bin);
 									xhr.send(formData);
-	
+
 									return;
 								}  // if no FormData we can still try to send it directly as last resort (see below)
 								
@@ -695,7 +730,7 @@
 						}
 
 						// Standard arguments
-						args = {name : file.target_name || file.name};
+						args = {name : file.target_name || file.name, id: file.id};
 
 						// Only add chunking args if needed
 						if (settings.chunk_size && file.size > settings.chunk_size && (features.chunks || typeof(blob) == 'string')) { // blob will be of type string if it was loaded in memory 
@@ -715,6 +750,7 @@
 							// Setup query string arguments
 							args.chunk = chunk;
 							args.chunks = chunks;
+							args.curChunkSize = curChunkSize;
 						} else {
 							curChunkSize = file.size;
 							chunkBlob = blob;

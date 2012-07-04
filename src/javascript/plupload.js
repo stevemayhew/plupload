@@ -154,6 +154,15 @@
 		 */
 		DONE : 5,
 
+		/**
+		 * File that is retrying uploading.  Client can set this state when a chunk upload
+		 * is determined to have failed and plupload will retry that chunk
+		 *
+		 * @property DONE
+		 * @final
+		 */
+		RETRYING : -6,
+
 		// Error constants used by the Error event
 
 		/**
@@ -171,6 +180,14 @@
 		 * @final
 		 */
 		HTTP_ERROR : -200,
+
+		/**
+		 * HTTP transport timeout/retry error. XMLHttpRequest failed to send after repeated attempts to retry sending.
+		 *
+		 * @property HTTP_REQUEST_RETRY_LIMIT
+		 * @final
+		 */
+		HTTP_REQUEST_RETRY_LIMIT : -201,
 
 		/**
 		 * Generic I/O error. For exampe if it wasn't possible to open the file stream on local machine.
@@ -902,6 +919,16 @@
 			multipart : true,
 			multi_selection : true,
 			file_data_name : 'file',
+			getRetryParameters: function(file) {
+				var params = null;
+				if (file.retryCount < 30) {
+					params = {
+						delay: 300 + ( 80 * file.retryCount),
+						timeout: -1
+					}
+				}
+				return params;
+			},
 			filters : []
 		}, settings);
 
@@ -923,7 +950,7 @@
 					}
 				}
 
-				// All files are DONE or FAILED
+				// All files are DONE or FAILED 
 				if (count == files.length) {
 					this.stop();
 					this.trigger("UploadComplete", files);
@@ -1602,8 +1629,9 @@
 	 * @param {String} id Unique file id.
 	 * @param {String} name File name.
 	 * @param {Number} size File size in bytes.
+	 * @param {type} file mineType (if supported)
 	 */
-	plupload.File = function(id, name, size) {
+	plupload.File = function(id, name, size, type) {
 		var self = this; // Setup alias for self to reduce code size when it's compressed
 
 		/**
@@ -1621,6 +1649,14 @@
 		 * @type String
 		 */
 		self.name = name;
+
+		/**
+		 * File type (if API supports it, null if not)
+		 *
+		 * @property mimeType
+		 * @type String
+		 */
+		self.mimeType = type;
 
 		/**
 		 * File size in bytes.

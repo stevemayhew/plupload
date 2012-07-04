@@ -17,3 +17,11 @@ jslint.xml
 *.suo
 *.user
 .DS_Store
+
+plupload.iml
+
+plupload.ipr
+
+plupload.iws
+
+src/flash/plupload/plupload_flash.iml

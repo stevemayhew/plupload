@@ -46,7 +46,6 @@ package com.plupload {
 		private var clickArea:MovieClip;
 		private var fileRefList:FileReferenceList;
 		private var files:Dictionary;
-		private var idCounter:int = 0;
 		private var currentFile:File;
 		private var id:String;
 		private var fileFilters:Array;
@@ -122,6 +121,7 @@ package com.plupload {
 			ExternalInterface.addCallback('clearQueue', this.clearFiles);
 			ExternalInterface.addCallback('setFileFilters', this.setFileFilters);
 			ExternalInterface.addCallback('uploadNextChunk', this.uploadNextChunk);
+			ExternalInterface.addCallback('retryUploadChunk', this.retryUploadChunk);
 
 			this.fireEvent("Init");
 		}
@@ -251,10 +251,11 @@ package com.plupload {
 
 			if (this.multipleFiles) {
 				for (var i:Number = 0; i < this.fileRefList.fileList.length; i++) {
-					processFile(new File("file_" + (this.idCounter++), this.fileRefList.fileList[i]));
+					var guid:String = getGuid();
+					processFile(new File(guid, this.fileRefList.fileList[i]));
 				}
 			} else {
-				processFile(new File("file_" + (this.idCounter++), this.fileRef));
+				processFile(new File(getGuid(), this.fileRef));
 				this.fileRefArray.push(this.fileRef);
 				initSingleFileReference();
 			}
@@ -353,6 +354,18 @@ package com.plupload {
 		}
 
 		/**
+		 * Retry (repost) the last chunk of the current file.  Returns false if there is no current file
+		 *
+		 * @return
+		 */
+		private function retryUploadChunk():Boolean {
+			if (this.currentFile) {
+				return this.currentFile.retryUploadChunk();
+			}
+			return false;
+		}
+
+		/**
 		 * File id to remove form upload queue.
 		 *
 		 * @param id Id of the file to remove.
@@ -397,8 +410,12 @@ package com.plupload {
 		 * @param type Name of event to fire.
 		 * @param obj Object with optional data.
 		 */
-		private function fireEvent(type:String, obj:Object = null):void {
-			ExternalInterface.call("plupload.flash.trigger", this.id, type, obj);
+		private function fireEvent(type:String, obj:Object = null):Object {
+			return ExternalInterface.call("plupload.flash.trigger", this.id, type, obj);
+		}
+
+		private function getGuid():String {
+			return ExternalInterface.call("plupload.guid");
 		}
 
 		/**
