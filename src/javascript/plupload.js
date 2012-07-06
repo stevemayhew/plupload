@@ -1630,8 +1630,9 @@
 	 * @param {String} name File name.
 	 * @param {Number} size File size in bytes.
 	 * @param {type} file mineType (if supported)
+	 * @param {dropped} file added via drop (default false)
 	 */
-	plupload.File = function(id, name, size, type) {
+	plupload.File = function(id, name, size, type, dropped) {
 		var self = this; // Setup alias for self to reduce code size when it's compressed
 
 		/**
@@ -1690,6 +1691,15 @@
 		 * @see plupload
 		 */
 		self.status = 0;
+
+		/**
+		 * Flag indicating file was added via a drop event.
+		 *
+		 * @property dropped
+		 * @type Boolean
+		 * @see plupload
+		 */
+		self.dropped = dropped !== undefined ? dropped : false;
 	};
 
 	/**

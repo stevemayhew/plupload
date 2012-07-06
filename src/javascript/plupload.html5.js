@@ -231,7 +231,7 @@
 					html5files[id] = file;
 
 					// Expose id, name and size
-					files.push(new plupload.File(id, file.fileName || file.name, file.fileSize || file.size, 'type' in file ? file.type : null)); // fileName / fileSize depricated
+					files.push(new plupload.File(id, file.fileName || file.name, file.fileSize || file.size, 'type' in file ? file.type : null, dropped)); // fileName / fileSize depricated
 				}
 
 				// Trigger FilesAdded event if we added any
@@ -320,7 +320,7 @@
 				
 				inputFile.onchange = function() {
 					// Add the selected files from file input
-					addSelectedFiles(this.files);
+					addSelectedFiles(this.files, false);
 					
 					// Clearing the value enables the user to select the same file again if they want to
 					this.value = '';
@@ -388,7 +388,7 @@
 
 								plupload.addEvent(dropInputElm, 'change', function() {
 									// Add the selected files from file input
-									addSelectedFiles(this.files);
+									addSelectedFiles(this.files, true);
 																		
 									// Remove input element
 									plupload.removeEvent(dropInputElm, 'change', uploader.id);
@@ -432,7 +432,7 @@
 
 						// Add dropped files
 						if (dataTransfer && dataTransfer.files) {
-							addSelectedFiles(dataTransfer.files);
+							addSelectedFiles(dataTransfer.files, true);
 						}
 
 						e.preventDefault();
