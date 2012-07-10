@@ -212,7 +212,7 @@
 		init : function(uploader, callback) {
 			var features, xhr;
 
-			function addSelectedFiles(native_files) {
+			function addSelectedFiles(native_files, dropped) {
 				var file, i, files = [], id, fileNames = {};
 
 				// Add the selected files to the file queue
