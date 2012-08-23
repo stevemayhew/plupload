@@ -46,8 +46,8 @@
 			// Detach the call so that error handling in the browser is presented correctly
 			setTimeout(function() {
 				var uploader = uploadInstances[id], i, args;
-
-				if (uploader) {
+				
+				if (uploader) {				
 					uploader.trigger('Flash:' + name, obj);
 				}
 			}, 0);
@@ -165,7 +165,7 @@
 					return;
 				}
 
-				if (!initialized[uploader.id]) {
+				if (initialized[uploader.id] === false) { // might also be undefined, if uploader was destroyed by that moment
 					setTimeout(waitLoad, 1);
 				}
 			}
@@ -174,12 +174,32 @@
 
 			// Fix IE memory leaks
 			browseButton = flashContainer = null;
+			
+			// destroy should always be available, after Flash:Init or before (#516)
+			uploader.bind("Destroy", function(up) {
+				var flashContainer;
+				
+				plupload.removeAllEvents(document.body, up.id);
+				
+				delete initialized[up.id];
+				delete uploadInstances[up.id];
+				
+				flashContainer = document.getElementById(up.id + '_flash_container');
+				if (flashContainer) {
+					container.removeChild(flashContainer);
+				}
+			});
 
 			// Wait for Flash to send init event
 			uploader.bind("Flash:Init", function() {	
 				var i;
 
-				getFlashObj().setFileFilters(uploader.settings.filters, uploader.settings.multi_selection);
+				try {
+					getFlashObj().setFileFilters(uploader.settings.filters, uploader.settings.multi_selection);
+				} catch (ex) {
+					callback({success : false});
+					return;
+				}
 
 				// Prevent eventual reinitialization of the instance
 				if (initialized[uploader.id]) {
@@ -446,21 +466,6 @@
 				
 				uploader.bind("DisableBrowse", function(up, disabled) {
 					getFlashObj().disableBrowse(disabled);
-				});
-			
-				
-				uploader.bind("Destroy", function(up) {
-					var flashContainer;
-					
-					plupload.removeAllEvents(document.body, up.id);
-					
-					delete initialized[up.id];
-					delete uploadInstances[up.id];
-					
-					flashContainer = document.getElementById(up.id + '_flash_container');
-					if (flashContainer) {
-						container.removeChild(flashContainer);
-					}
 				});
 							
 				callback({success : true});

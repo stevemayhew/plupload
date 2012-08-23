@@ -499,7 +499,7 @@
 			}
 
 			// Use getBoundingClientRect on IE 6 and IE 7 but not on IE 8 in standards mode
-			if (node && node.getBoundingClientRect && (navigator.userAgent.indexOf('MSIE') > 0 && doc.documentMode !== 8)) {
+			if (node && node.getBoundingClientRect && ((navigator.userAgent.indexOf('MSIE') > 0) && (doc.documentMode < 8))) {
 				nodeRect = getIEPos(node);
 				rootRect = getIEPos(root);
 
@@ -720,6 +720,27 @@
 		},
 
 		/**
+		 * returns the z-index of a DOM element, if explicitly set with a style or auto set value
+		 * by virtue of the element being a member of a stacking context (see: http://www.w3.org/TR/CSS2/visuren.html#z-index)
+		 *
+		 * This will handle a button in a dialog or tooltip where the maximizing of the z-index of
+		 * the buttons stacking context has already been handled.
+		 *
+		 * @param domElement
+		 * @return z index of root of stacking context or 0
+		 */
+		getZindex: function(domElement) {
+			var zIndex = NaN;
+			var contextRootElement = domElement;
+			while (contextRootElement != null && isNaN(zIndex)) {
+				zIndex = parseInt(plupload.getStyle(contextRootElement, 'zIndex'), 10);
+				contextRootElement = contextRootElement.parentNode;
+			}
+			return isNaN(zIndex) ? 0 : zIndex;
+		},
+
+
+		/**
 		 * Adds an event handler to the specified object and store reference to the handler
 		 * in objects internal Plupload registry (@see removeEvent).
 		 *
@@ -817,10 +838,10 @@
 				// undefined or not, key should match			
 				if (type[i].key === key || type[i].orig === callback) {
 										
-					if (obj.detachEvent) {
-						obj.detachEvent('on'+name, type[i].func);
-					} else if (obj.removeEventListener) {
+					if (obj.removeEventListener) {
 						obj.removeEventListener(name, type[i].func, false);		
+					} else if (obj.detachEvent) {
+						obj.detachEvent('on'+name, type[i].func);
 					}
 					
 					type[i].orig = null;
@@ -1295,7 +1316,7 @@
 			 * @method start
 			 */
 			start : function() {
-				if (this.state != plupload.STARTED) {
+				if (files.length && this.state != plupload.STARTED) {
 					this.state = plupload.STARTED;
 					this.trigger("StateChanged");	
 					
